@@ -1,0 +1,23 @@
+{
+  "name": "youtube-metadata-service",
+  "version": "1.0.0",
+  "description": "A Node.js web server that fetches YouTube video metadata and returns it in JSON format.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.0",
+    "yt_metadata": "^1.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Nitin Bhujwa",
+  "license": "ISC"
+}
