@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  youtube-metadata-service:
+    build: .
+    ports:
+      - "8000:8000"  # Map port 8000 on the host to port 8000 in the container
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+    volumes:
+      - .:/app
+    command: node server.js
