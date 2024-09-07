@@ -1,6 +1,5 @@
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const port = 8000;
@@ -10,39 +9,41 @@ const url = 'https://m.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D
 
 async function fetchTrendingMusicData() {
     try {
-        // Fetch the HTML content of the trending music page
-        const { data } = await axios.get(url);
+        // Launch Puppeteer and open a new browser page
+        const browser = await puppeteer.launch({ headless: true });
+        const page = await browser.newPage();
 
-        // Load the HTML content into cheerio
-        const $ = cheerio.load(data);
+        // Navigate to the YouTube trending music page
+        await page.goto(url, { waitUntil: 'networkidle2' });
 
-        // Initialize an array to store the video metadata
-        const videos = [];
+        // Extract video metadata
+        const videos = await page.evaluate(() => {
+            const videoElements = document.querySelectorAll('div.media-item');
+            const videoData = [];
 
-        // Select and extract relevant data for each video
-        $('div.media-item').each((i, element) => {
-            const video = {};
+            videoElements.forEach(element => {
+                const titleElement = element.querySelector('h3.title');
+                const thumbnailElement = element.querySelector('img');
+                const descriptionElement = element.querySelector('div.description');
+                const viewsElement = element.querySelector('span.view-count');
+                const likesElement = element.querySelector('button.like-button-renderer-like-button');
 
-            // Extract video title
-            video.title = $(element).find('h3.title').text().trim();
+                const video = {
+                    title: titleElement ? titleElement.textContent.trim() : null,
+                    thumbnail: thumbnailElement ? thumbnailElement.src : null,
+                    description: descriptionElement ? descriptionElement.textContent.trim() : null,
+                    views: viewsElement ? viewsElement.textContent.trim().replace(' views', '') : null,
+                    likes: likesElement ? likesElement.textContent.trim().replace(' likes', '') : null
+                };
 
-            // Extract video thumbnail URL
-            video.thumbnail = $(element).find('img').attr('src');
+                videoData.push(video);
+            });
 
-            // Extract video description (if available)
-            video.description = $(element).find('div.description').text().trim();
-
-            // Extract views count
-            const viewsText = $(element).find('span.view-count').text().trim();
-            video.views = viewsText ? viewsText.replace(' views', '') : null;
-
-            // Extract like count (if available)
-            const likeText = $(element).find('button.like-button-renderer-like-button').text().trim();
-            video.likes = likeText ? likeText.replace(' likes', '') : null;
-
-            // Add the video object to the videos array
-            videos.push(video);
+            return videoData;
         });
+
+        // Close the Puppeteer browser
+        await browser.close();
 
         return videos;
 
