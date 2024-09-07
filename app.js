@@ -1,63 +1,69 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const https = require('https');
+const cheerio = require('cheerio'); // For HTML parsing
 
 const app = express();
-const port = 8000;
+const port = 3000; // You can customize the port number
 
-// URL of YouTube Trending Music page
-const url = 'https://m.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D';
+// Function to fetch and parse HTML content
+async function fetchAndParseHTML(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      let htmlData = '';
 
-async function fetchTrendingMusicData() {
-    try {
-        // Launch Puppeteer and open a new browser page
-        const browser = await puppeteer.launch({ headless: true });
-        const page = await browser.newPage();
+      res.on('data', (chunk) => {
+        htmlData += chunk;
+      });
 
-        // Navigate to the YouTube trending music page
-        await page.goto(url, { waitUntil: 'networkidle2' });
+      res.on('end', () => {
+        resolve(cheerio.load(htmlData));
+      });
 
-        // Extract video metadata
-        const videos = await page.evaluate(() => {
-            const videoElements = document.querySelectorAll('div.media-item');
-            const videoData = [];
-
-            videoElements.forEach(element => {
-                const titleElement = element.querySelector('h3.title');
-                const thumbnailElement = element.querySelector('img');
-                const descriptionElement = element.querySelector('div.description');
-                const viewsElement = element.querySelector('span.view-count');
-                const likesElement = element.querySelector('button.like-button-renderer-like-button');
-
-                const video = {
-                    title: titleElement ? titleElement.textContent.trim() : null,
-                    thumbnail: thumbnailElement ? thumbnailElement.src : null,
-                    description: descriptionElement ? descriptionElement.textContent.trim() : null,
-                    views: viewsElement ? viewsElement.textContent.trim().replace(' views', '') : null,
-                    likes: likesElement ? likesElement.textContent.trim().replace(' likes', '') : null
-                };
-
-                videoData.push(video);
-            });
-
-            return videoData;
-        });
-
-        // Close the Puppeteer browser
-        await browser.close();
-
-        return videos;
-
-    } catch (error) {
-        console.error('Error fetching data:', error);
-        return [];
-    }
+      res.on('error', (err) => {
+        reject(err);
+      });
+    });
+  });
 }
 
+// Function to extract video metadata
+async function extractVideoMetadata(videoElement) {
+  const title = videoElement.find('.title-text').text().trim();
+  const thumbnailUrl = videoElement.find('img.style-scope.ytd-grid-video-renderer').attr('src'); // Prioritize image with 'style-scope.ytd-grid-video-renderer' class
+  const description = videoElement.find('.description-snippet').text().trim() || ''; // Handle cases where description is missing
+  const viewsCount = videoElement.find('.style-scope.ytd-grid-video-renderer .view-count').text().trim() || ''; // Account for potential view count format variations
+
+  // Like count extraction currently not supported through scraping due to dynamic content.
+  // Consider using YouTube Data API v3 for accurate like counts (requires API key and authorization).
+
+  return { title, thumbnailUrl, description, viewsCount };
+}
+
+// Main function to fetch and process video metadata
+async function fetchTrendingMusicMetadata(url) {
+  try {
+    const $ = await fetchAndParseHTML(url);
+    const videoElements = $('.yt-simple-endpoint style-scope ytd-grid-video-renderer'); // Select video elements with specific class
+
+    const videoMetadata = [];
+    for (const videoElement of videoElements) {
+      videoMetadata.push(await extractVideoMetadata($(videoElement)));
+    }
+
+    return videoMetadata;
+  } catch (error) {
+    console.error('Error fetching video metadata:', error);
+    return [];
+  }
+}
+
+// Web server route to handle requests
 app.get('/trending-music', async (req, res) => {
-    const videos = await fetchTrendingMusicData();
-    res.json(videos);
+  const videoMetadata = await fetchTrendingMusicMetadata('https://m.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D');
+  res.json(videoMetadata);
 });
 
+// Start the web server
 app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Server listening on port ${port}`);
 });
